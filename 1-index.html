@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<title>Drone practice playground</title>
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: #f5f5f7;
+    color: #1d1d1f;
+    font: 400 16px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .page { max-width: 980px; margin: 0 auto; padding: 28px 20px 48px; }
+  h1 { font: 600 30px/1.15 -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif; letter-spacing: -0.02em; margin: 8px 0 6px; }
+  .sub { color: #6e6e73; margin: 0 0 22px; max-width: 56ch; }
+  h2 { font-size: 20px; letter-spacing: -0.01em; margin: 34px 0 10px; }
+  .sim-wrap {
+    position: relative; width: 100%; height: 560px;
+    border-radius: 20px; overflow: hidden;
+    box-shadow: inset 0 0 0 1px rgba(60,60,67,0.12), 0 18px 50px rgba(0,0,0,0.08);
+    background: #e6e3da;
+  }
+  .sim-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; display: block; }
+  .sim-hud { position: absolute; display: flex; gap: 8px; flex-wrap: wrap; pointer-events: none; }
+  .sim-hud-top { top: 10px; left: 10px; right: 10px; justify-content: center; }
+  .sim-pill {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 7px 12px; border-radius: 999px;
+    background: rgba(255,255,255,0.6);
+    -webkit-backdrop-filter: blur(14px) saturate(1.4); backdrop-filter: blur(14px) saturate(1.4);
+    box-shadow: 0 1px 4px rgba(0,0,0,0.08), inset 0 0 0 1px rgba(255,255,255,0.5);
+    font-size: 13px; font-weight: 500; font-variant-numeric: tabular-nums;
+  }
+  .sim-label { color: rgba(60,60,67,0.6); font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; }
+  .sim-bat-shell { width: 34px; height: 11px; border-radius: 3.5px; border: 1px solid rgba(60,60,67,0.4); padding: 1.5px; }
+  .sim-bat-fill { height: 100%; width: 100%; border-radius: 2px; background: #30d158; transition: width 0.3s ease; }
+  .sim-hud-keys { bottom: 12px; left: 50%; transform: translateX(-50%); gap: 16px; white-space: nowrap; }
+  .sim-toast {
+    position: absolute; top: 52px; left: 50%; transform: translateX(-50%);
+    padding: 8px 16px; border-radius: 999px; background: rgba(29,29,31,0.82); color: #fff;
+    font-size: 13px; font-weight: 500; pointer-events: none;
+    -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
+  }
+  .sim-overlay {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    background: rgba(245,245,247,0.35);
+    -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px);
+  }
+  .sim-card {
+    background: rgba(255,255,255,0.85);
+    -webkit-backdrop-filter: blur(20px) saturate(1.5); backdrop-filter: blur(20px) saturate(1.5);
+    border-radius: 20px; box-shadow: 0 12px 40px rgba(0,0,0,0.16), inset 0 0 0 1px rgba(255,255,255,0.6);
+    padding: 22px 26px; max-width: 300px; text-align: center; font-size: 15px;
+  }
+  .sim-card p { margin: 0 0 14px; }
+  .sim-button {
+    appearance: none; border: 0; border-radius: 999px; background: #0a84ff; color: #fff;
+    font: 600 15px/1 -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+    padding: 12px 22px; min-height: 44px; cursor: pointer;
+  }
+  .sim-button:active { background: #0066cc; }
+  @media (max-width: 600px) {
+    .sim-wrap { height: 440px; }
+    .sim-wrap .sim-hud.sim-hud-keys { display: none; }
+  }
+  ol.howto { padding-left: 22px; }
+  ol.howto li { margin: 10px 0; }
+  ol.howto b { font-weight: 600; }
+  .note {
+    background: #fff; border-radius: 16px; padding: 16px 18px; margin-top: 26px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.06); font-size: 14.5px;
+  }
+  .note b { display: block; margin-bottom: 4px; }
+  footer { color: #86868b; font-size: 13px; margin-top: 30px; }
+</style>
+</head>
+<body>
+<div class="page">
+  <h1>Drone practice playground</h1>
+  <p class="sub">A little quadcopter in a park, so you can get a feel for the controls before you spend on a real drone. Fly through the floating rings, and land back on the pad to recharge.</p>
+
+  <div class="sim-wrap" id="wrap">
+    <canvas class="sim-canvas" id="canvas" aria-label="Drone flight playground"></canvas>
+    <div class="sim-hud sim-hud-top">
+      <div class="sim-pill"><span class="sim-label">Alt</span> <span id="hud-alt">0.0</span> m</div>
+      <div class="sim-pill"><span class="sim-label">Speed</span> <span id="hud-spd">0.0</span> m/s</div>
+      <div class="sim-pill"><span class="sim-label">Hdg</span> <span id="hud-hdg">000</span>&deg;</div>
+      <div class="sim-pill"><div class="sim-bat-shell"><div class="sim-bat-fill" id="hud-bat-fill"></div></div><span id="hud-bat">100</span>%</div>
+      <div class="sim-pill"><span class="sim-label">Rings</span> <span id="hud-score">0</span></div>
+    </div>
+    <div class="sim-hud sim-hud-keys sim-pill" id="keyhint">
+      <span><b>W A S D</b> move</span><span><b>R / F</b> up &middot; down</span><span><b>Q / E</b> turn</span>
+    </div>
+    <div class="sim-toast" id="toast" hidden></div>
+    <div class="sim-overlay" id="overlay" hidden>
+      <div class="sim-card">
+        <p id="crash-text"></p>
+        <button type="button" class="sim-button" id="reset">Fly again</button>
+      </div>
+    </div>
+  </div>
+
+  <h2>How to fly</h2>
+  <ol class="howto">
+    <li><b>Lift off.</b> On your phone, push the left stick up. On your Mac, hold R. Down is F, or pull the stick down.</li>
+    <li><b>Turn.</b> Left stick sideways, or Q and E on the keyboard.</li>
+    <li><b>Move.</b> Right stick glides you forward, back and sideways. On the keyboard use W A S D or the arrow keys.</li>
+    <li><b>Score.</b> Fly through a ring at its height to collect it. Watch the altitude readout at the top.</li>
+    <li><b>Recharge.</b> The battery drains as you fly. Land gently on the H pad to top it up.</li>
+  </ol>
+
+  <div class="note">
+    <b>A feel, not a flight model</b>
+    This is a practice playground made for fun. It is not an official DJI tool and it does not copy how any real drone handles. Real drones are heavier, faster and drift with wind, so treat this as a gentle first taste only.
+  </div>
+
+  <footer>Made 5 Nov 2026. Nothing is tracked or sent from this page.</footer>
+</div>
+
+<script>
+(function () {
+'use strict';
+var FIELD = 900, CLIMB = 7, ACC = 30, DRAG = 1.8, YAW_RATE = 2.6;
+var HOME = { x: 0, y: 0 };
+function rand(min, max) { return min + Math.random() * (max - min); }
+
+function spawnRings(existing, awayFrom) {
+  var rings = existing.slice(), guard = 0;
+  while (rings.length < 5 && guard++ < 300) {
+    var x = rand(-FIELD / 2 + 70, FIELD / 2 - 70), y = rand(-FIELD / 2 + 70, FIELD / 2 - 70);
+    if (awayFrom && Math.hypot(x - awayFrom.x, y - awayFrom.y) < 120) continue;
+    if (Math.hypot(x - HOME.x, y - HOME.y) < 60) continue;
+    if (rings.some(function (r) { return Math.hypot(r.x - x, r.y - y) < 90; })) continue;
+    rings.push({ x: x, y: y, alt: [12, 20, 30, 42][Math.floor(Math.random() * 4)] });
+  }
+  return rings;
+}
+
+function makeWorld() {
+  var trees = [], buildings = [], tints = ['#c9d4de', '#d8d2c8', '#ccd8d2'], guard = 0;
+  while (trees.length < 56 && guard++ < 800) {
+    var x = rand(-FIELD / 2 + 40, FIELD / 2 - 40), y = rand(-FIELD / 2 + 40, FIELD / 2 - 40);
+    if (Math.hypot(x - HOME.x, y - HOME.y) < 70) continue;
+    trees.push({ x: x, y: y, r: rand(7, 14), h: rand(14, 32), shade: Math.random() });
+  }
+  guard = 0;
+  while (buildings.length < 6 && guard++ < 200) {
+    var bx = rand(-FIELD / 2 + 80, FIELD / 2 - 80), by = rand(-FIELD / 2 + 80, FIELD / 2 - 80);
+    if (Math.hypot(bx - HOME.x, by - HOME.y) < 130) continue;
+    buildings.push({ x: bx, y: by, w: rand(26, 46), d: rand(26, 46), h: rand(30, 75), tint: tints[buildings.length % tints.length] });
+  }
+  return { trees: trees, buildings: buildings };
+}
+
+var world = makeWorld();
+var sim;
+function freshSim(keepScore) {
+  sim = {
+    x: HOME.x, y: HOME.y, alt: 0, vx: 0, vy: 0, valt: 0, yaw: 0,
+    battery: 100, score: keepScore, rings: spawnRings(sim ? sim.rings : [], null),
+    trees: world.trees, buildings: world.buildings, crashed: null, started: false
+  };
+}
+freshSim(0);
+
+var canvas = document.getElementById('canvas'), wrap = document.getElementById('wrap');
+var ctx = canvas.getContext('2d');
+var W = 0, H = 0, DPR = 1;
+function fit() {
+  DPR = Math.min(window.devicePixelRatio || 1, 2);
+  W = wrap.clientWidth; H = wrap.clientHeight;
+  canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
+}
+fit();
+if (window.ResizeObserver) new ResizeObserver(fit).observe(wrap);
+window.addEventListener('resize', fit);
+
+var hudAlt = document.getElementById('hud-alt'), hudSpd = document.getElementById('hud-spd'),
+    hudHdg = document.getElementById('hud-hdg'), hudBat = document.getElementById('hud-bat'),
+    hudBatFill = document.getElementById('hud-bat-fill'), hudScore = document.getElementById('hud-score'),
+    toastEl = document.getElementById('toast'), overlay = document.getElementById('overlay'),
+    crashText = document.getElementById('crash-text'), keyhint = document.getElementById('keyhint');
+if (window.matchMedia && window.matchMedia('(pointer: coarse)').matches) keyhint.style.display = 'none';
+
+var toastTimer = 0;
+function say(msg) {
+  toastEl.textContent = msg; toastEl.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(function () { toastEl.hidden = true; }, 2200);
+}
+function showCrash(msg) {
+  sim.crashed = msg; crashText.textContent = msg; overlay.hidden = false;
+}
+document.getElementById('reset').addEventListener('click', function () {
+  freshSim(sim.score); overlay.hidden = true; say('Back on the pad. Off you go.');
+});
+
+var keys = {};
+var KEYMAP = {
+  ArrowUp: 'pitch+', KeyW: 'pitch+', ArrowDown: 'pitch-', KeyS: 'pitch-',
+  ArrowLeft: 'strafe-', KeyA: 'strafe-', ArrowRight: 'strafe+', KeyD: 'strafe+',
+  Space: 'up', KeyR: 'up', ShiftLeft: 'down', ShiftRight: 'down', KeyF: 'down',
+  KeyQ: 'yaw-', KeyE: 'yaw+'
+};
+window.addEventListener('keydown', function (e) {
+  if (e.code === 'KeyR' && sim.crashed) {
+    freshSim(sim.score); overlay.hidden = true; say('Back on the pad. Off you go.');
+    e.preventDefault(); return;
+  }
+  if (KEYMAP[e.code]) { keys[KEYMAP[e.code]] = true; e.preventDefault(); }
+});
+window.addEventListener('keyup', function (e) { if (KEYMAP[e.code]) keys[KEYMAP[e.code]] = false; });
+
+var sticks = { left: { active: -1, vx: 0, vy: 0 }, right: { active: -1, vx: 0, vy: 0 } };
+function stickGeom() {
+  var r = Math.min(62, Math.max(48, W * 0.09)), pad = 24;
+  return { r: r, left: { cx: pad + r, cy: H - pad - r }, right: { cx: W - pad - r, cy: H - pad - r } };
+}
+function pointerPos(e) {
+  var rect = canvas.getBoundingClientRect();
+  return { x: e.clientX - rect.left, y: e.clientY - rect.top };
+}
+function applyStick(side, p) {
+  var g = stickGeom(), c = side === 'left' ? g.left : g.right;
+  var dx = (p.x - c.cx) / g.r, dy = (p.y - c.cy) / g.r;
+  var len = Math.hypot(dx, dy);
+  if (len > 1) { dx /= len; dy /= len; }
+  if (Math.abs(dx) < 0.09) dx = 0;
+  if (Math.abs(dy) < 0.09) dy = 0;
+  sticks[side].vx = dx; sticks[side].vy = dy;
+}
+canvas.addEventListener('pointerdown', function (e) {
+  var p = pointerPos(e), side = p.x < W / 2 ? 'left' : 'right', s = sticks[side];
+  if (s.active !== -1) return;
+  s.active = e.pointerId;
+  try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+  applyStick(side, p); e.preventDefault();
+});
+canvas.addEventListener('pointermove', function (e) {
+  if (sticks.left.active === e.pointerId) applyStick('left', pointerPos(e));
+  else if (sticks.right.active === e.pointerId) applyStick('right', pointerPos(e));
+});
+function stickUp(e) {
+  if (sticks.left.active === e.pointerId) { sticks.left.active = -1; sticks.left.vx = 0; sticks.left.vy = 0; }
+  if (sticks.right.active === e.pointerId) { sticks.right.active = -1; sticks.right.vx = 0; sticks.right.vy = 0; }
+}
+canvas.addEventListener('pointerup', stickUp);
+canvas.addEventListener('pointercancel', stickUp);
+
+function drawStick(c, st, labelA, labelB, r) {
+  ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.strokeStyle = 'rgba(60,60,67,0.25)'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(c.cx, c.cy, r, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  var kx = c.cx + st.vx * r * 0.62, ky = c.cy + st.vy * r * 0.62;
+  ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.strokeStyle = 'rgba(60,60,67,0.45)';
+  ctx.beginPath(); ctx.arc(kx, ky, r * 0.38, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = 'rgba(60,60,67,0.5)'; ctx.font = '500 10px -apple-system, system-ui, sans-serif'; ctx.textAlign = 'center';
+  ctx.fillText(labelA, c.cx, c.cy - r - 14);
+  ctx.fillText(labelB, c.cx, c.cy + r + 18);
+}
+
+function draw(now) {
+  var s = sim;
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  var zoom = 1 / (1 + s.alt * 0.0075);
+  var scale = (W / 130) * zoom, persp = 0.45;
+  var g = ctx.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#eef0ee'); g.addColorStop(1, '#e6e3da');
+  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  function sx(x) { return W / 2 + (x - s.x) * scale; }
+  function sy(y, height) { return H / 2 + (y - s.y) * scale - height * scale * persp; }
+
+  ctx.strokeStyle = 'rgba(60,60,67,0.14)'; ctx.lineWidth = 2; ctx.setLineDash([10, 8]);
+  ctx.strokeRect(sx(-FIELD / 2), sy(FIELD / 2, 0), FIELD * scale, FIELD * scale);
+  ctx.setLineDash([]);
+
+  ctx.fillStyle = 'rgba(168,198,159,0.35)';
+  for (var i = 0; i < 22; i++) {
+    var px = Math.sin(i * 999.7) * 0.5 * FIELD * 0.8, py = Math.cos(i * 654.3) * 0.5 * FIELD * 0.8;
+    ctx.beginPath(); ctx.ellipse(sx(px), sy(py, 0), 60 * scale, 42 * scale, i, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.strokeStyle = 'rgba(255,255,255,0.75)'; ctx.lineWidth = 7 * scale;
+  ctx.beginPath();
+  ctx.moveTo(sx(-FIELD / 2), sy(120, 0)); ctx.lineTo(sx(FIELD / 2), sy(120, 0));
+  ctx.moveTo(sx(160, 0), sy(-FIELD / 2, 0)); ctx.lineTo(sx(160, 0), sy(FIELD / 2, 0));
+  ctx.stroke();
+
+  ctx.fillStyle = 'rgba(60,60,67,0.08)';
+  ctx.beginPath(); ctx.ellipse(sx(HOME.x), sy(HOME.y, 0), 14 * scale, 14 * scale, 0, 0, Math.PI * 2); ctx.fill();
+  ctx.strokeStyle = 'rgba(60,60,67,0.35)'; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.ellipse(sx(HOME.x), sy(HOME.y, 0), 12 * scale, 12 * scale, 0, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = 'rgba(60,60,67,0.45)';
+  ctx.font = '600 ' + Math.max(10, 8 * scale) + 'px -apple-system, system-ui, sans-serif';
+  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText('H', sx(HOME.x), sy(HOME.y, 0));
+
+  s.rings.forEach(function (r) {
+    var rx = sx(r.x), ryG = sy(r.y, 0), ryA = sy(r.y, r.alt), rr = 11 * scale;
+    ctx.strokeStyle = 'rgba(10,132,255,0.25)'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 5]);
+    ctx.beginPath(); ctx.moveTo(rx, ryG); ctx.lineTo(rx, ryA); ctx.stroke(); ctx.setLineDash([]);
+    ctx.strokeStyle = '#0a84ff'; ctx.lineWidth = Math.max(2.5, 0.9 * scale);
+    ctx.beginPath(); ctx.ellipse(rx, ryA, rr, rr * 0.62, 0, 0, Math.PI * 2); ctx.stroke();
+    ctx.fillStyle = 'rgba(10,132,255,0.85)';
+    ctx.font = '600 ' + Math.max(9, 5 * scale) + 'px -apple-system, system-ui, sans-serif';
+    ctx.fillText(r.alt + ' m', rx, ryA - rr * 0.62 - 6);
+  });
+
+  s.trees.forEach(function (t) {
+    var tx = sx(t.x), tyG = sy(t.y, 0);
+    ctx.fillStyle = 'rgba(60,60,67,0.10)';
+    ctx.beginPath(); ctx.ellipse(tx + 3, tyG + 2, t.r * scale, t.r * scale * 0.8, 0, 0, Math.PI * 2); ctx.fill();
+    var tyA = sy(t.y, t.h * 0.75);
+    ctx.fillStyle = t.shade > 0.5 ? '#7fa873' : '#93b784';
+    ctx.beginPath(); ctx.ellipse(tx, tyA, t.r * scale, t.r * scale * 0.85, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = 'rgba(255,255,255,0.25)';
+    ctx.beginPath(); ctx.ellipse(tx - t.r * scale * 0.25, tyA - t.r * scale * 0.25, t.r * scale * 0.45, t.r * scale * 0.35, 0, 0, Math.PI * 2); ctx.fill();
+  });
+
+  s.buildings.forEach(function (b) {
+    var bx = sx(b.x), byG = sy(b.y, 0), byA = sy(b.y, b.h), hw = b.w * scale / 2, hd = b.d * scale / 2;
+    ctx.fillStyle = 'rgba(60,60,67,0.12)'; ctx.fillRect(bx - hw + 4, byG - hd + 4, hw * 2, hd * 2);
+    ctx.fillStyle = 'rgba(120,130,140,0.55)';
+    ctx.beginPath();
+    ctx.moveTo(bx - hw, byG - hd); ctx.lineTo(bx + hw, byG - hd);
+    ctx.lineTo(bx + hw, byA - hd); ctx.lineTo(bx - hw, byA - hd);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = 'rgba(100,110,120,0.65)';
+    ctx.beginPath();
+    ctx.moveTo(bx + hw, byG - hd); ctx.lineTo(bx + hw, byG + hd);
+    ctx.lineTo(bx + hw, byA + hd); ctx.lineTo(bx + hw, byA - hd);
+    ctx.closePath(); ctx.fill();
+    ctx.fillStyle = b.tint; ctx.fillRect(bx - hw, byA - hd, hw * 2, hd * 2);
+    ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1;
+    ctx.strokeRect(bx - hw, byA - hd, hw * 2, hd * 2);
+    ctx.fillStyle = 'rgba(60,60,67,0.5)';
+    ctx.font = '500 ' + Math.max(8, 4 * scale) + 'px -apple-system, system-ui, sans-serif';
+    ctx.fillText((b.h | 0) + ' m', bx, byA + hd + 10);
+  });
+
+  var dAlpha = Math.max(0.05, 0.3 - s.alt * 0.004);
+  ctx.fillStyle = 'rgba(60,60,67,' + dAlpha + ')';
+  var shR = Math.max(3, 5 * scale * (1 - Math.min(s.alt, 80) * 0.006));
+  ctx.beginPath(); ctx.ellipse(W / 2 + 4, H / 2 + 3, shR * 1.6, shR, 0, 0, Math.PI * 2); ctx.fill();
+
+  var dy = H / 2 - s.alt * scale * persp, dx = W / 2;
+  var body = Math.max(6, 4.4 * scale);
+  ctx.save(); ctx.translate(dx, dy); ctx.rotate(s.yaw);
+  var arm = body * 1.35;
+  ctx.strokeStyle = '#3a3a3c'; ctx.lineWidth = Math.max(2, body * 0.28);
+  ctx.beginPath();
+  ctx.moveTo(-arm, -arm); ctx.lineTo(arm, arm); ctx.moveTo(arm, -arm); ctx.lineTo(-arm, arm);
+  ctx.stroke();
+  var spin = now / 90;
+  [[-arm, -arm], [arm, -arm], [-arm, arm], [arm, arm]].forEach(function (p) {
+    ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.strokeStyle = 'rgba(60,60,67,0.55)'; ctx.lineWidth = 1.5;
+    ctx.beginPath(); ctx.arc(p[0], p[1], body * 0.85, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+    ctx.strokeStyle = 'rgba(60,60,67,0.8)'; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(p[0], p[1], body * 0.55, spin, spin + 1.6); ctx.stroke();
+    ctx.beginPath(); ctx.arc(p[0], p[1], body * 0.55, spin + Math.PI, spin + Math.PI + 1.6); ctx.stroke();
+  });
+  ctx.fillStyle = '#ffffff'; ctx.strokeStyle = 'rgba(60,60,67,0.6)'; ctx.lineWidth = 1.5;
+  var br = body * 0.5;
+  ctx.beginPath();
+  if (ctx.roundRect) ctx.roundRect(-body * 0.75, -body * 0.75, body * 1.5, body * 1.5, br);
+  else ctx.rect(-body * 0.75, -body * 0.75, body * 1.5, body * 1.5);
+  ctx.fill(); ctx.stroke();
+  ctx.fillStyle = '#0a84ff';
+  ctx.beginPath();
+  ctx.moveTo(0, -body * 0.75); ctx.lineTo(-body * 0.3, -body * 0.2); ctx.lineTo(body * 0.3, -body * 0.2);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+
+  if (s.battery < 20 && s.battery > 0 && !s.crashed) {
+    ctx.fillStyle = 'rgba(255,69,58,0.9)'; ctx.font = '600 12px -apple-system, system-ui, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText('Battery low - head back to the pad', W / 2, 64);
+  }
+
+  var geom = stickGeom();
+  drawStick(geom.left, sticks.left, 'UP \u00b7 DOWN', 'TURN', geom.r);
+  drawStick(geom.right, sticks.right, 'FORWARD \u00b7 BACK', 'GLIDE', geom.r);
+}
+
+var last = performance.now(), hudTick = 0;
+function step(now) {
+  var dt = Math.min((now - last) / 1000, 0.05);
+  last = now;
+  var s = sim;
+  var pitch = 0, strafe = 0, throttle = 0, yawIn = 0;
+  if (sticks.left.active !== -1 || Math.abs(sticks.left.vx) > 0.02 || Math.abs(sticks.left.vy) > 0.02) {
+    throttle = -sticks.left.vy; yawIn = sticks.left.vx;
+  }
+  if (sticks.right.active !== -1 || Math.abs(sticks.right.vx) > 0.02 || Math.abs(sticks.right.vy) > 0.02) {
+    pitch = -sticks.right.vy; strafe = sticks.right.vx;
+  }
+  if (keys['pitch+']) pitch += 1;
+  if (keys['pitch-']) pitch -= 1;
+  if (keys['strafe+']) strafe += 1;
+  if (keys['strafe-']) strafe -= 1;
+  if (keys['up']) throttle += 1;
+  if (keys['down']) throttle -= 1;
+  if (keys['yaw-']) yawIn -= 1;
+  if (keys['yaw+']) yawIn += 1;
+  pitch = Math.max(-1, Math.min(1, pitch)); strafe = Math.max(-1, Math.min(1, strafe));
+  throttle = Math.max(-1, Math.min(1, throttle)); yawIn = Math.max(-1, Math.min(1, yawIn));
+
+  if (!s.crashed) {
+    if (!s.started && (Math.abs(throttle) > 0.1 || Math.abs(pitch) > 0.1)) { s.started = true; say('Lifting off. Nice and easy.'); }
+    if (s.battery <= 0.5) throttle = Math.min(throttle, -0.35);
+    s.yaw += yawIn * YAW_RATE * dt;
+    var fx = Math.sin(s.yaw), fy = -Math.cos(s.yaw), rx = Math.cos(s.yaw), ry = Math.sin(s.yaw);
+    s.vx += (fx * pitch + rx * strafe) * ACC * dt;
+    s.vy += (fy * pitch + ry * strafe) * ACC * dt;
+    var drag = Math.exp(-DRAG * dt * (s.alt <= 0.01 ? 3 : 1));
+    s.vx *= drag; s.vy *= drag;
+    s.x += s.vx * dt; s.y += s.vy * dt;
+    var targetValt = throttle * CLIMB;
+    s.valt += (targetValt - s.valt) * Math.min(1, 4 * dt);
+    s.alt += s.valt * dt;
+    if (s.alt <= 0) {
+      if (s.valt < -5.5 && s.battery > 0) showCrash('That was a hard landing. Press R or tap below to go again.');
+      s.alt = 0; s.valt = 0;
+    }
+    var B = FIELD / 2 - 12;
+    if (s.x < -B) s.vx += (-B - s.x) * -2 * dt * 10;
+    if (s.x > B) s.vx -= (s.x - B) * 2 * dt * 10;
+    if (s.y < -B) s.vy += (-B - s.y) * -2 * dt * 10;
+    if (s.y > B) s.vy -= (s.y - B) * 2 * dt * 10;
+    for (var i = 0; i < s.trees.length && !s.crashed; i++) {
+      var t = s.trees[i];
+      if (s.alt < t.h && Math.hypot(s.x - t.x, s.y - t.y) < t.r * 0.45 + 1.2) {
+        showCrash('Clipped a tree. Press R or tap below to go again.');
+      }
+    }
+    for (var j = 0; j < s.buildings.length && !s.crashed; j++) {
+      var b = s.buildings[j];
+      if (s.alt < b.h && Math.abs(s.x - b.x) < b.w / 2 + 1 && Math.abs(s.y - b.y) < b.d / 2 + 1) {
+        showCrash('Bumped into a building. Press R or tap below to go again.');
+      }
+    }
+    if (!s.crashed) {
+      for (var k = 0; k < s.rings.length; k++) {
+        var r = s.rings[k];
+        if (Math.hypot(s.x - r.x, s.y - r.y) < 11 && Math.abs(s.alt - r.alt) < 6) {
+          s.rings.splice(k, 1);
+          s.rings = spawnRings(s.rings, { x: s.x, y: s.y });
+          s.score += 1;
+          say(s.score % 5 === 0 ? s.score + ' rings. You have the touch.' : 'Clean through. +1');
+          break;
+        }
+      }
+    }
+    var work = Math.abs(pitch) + Math.abs(strafe) + Math.abs(throttle) + Math.abs(yawIn);
+    s.battery -= (0.06 + work * 0.12) * dt * (s.alt > 0.01 ? 1.6 : 1);
+    var onPad = s.alt <= 0.01 && Math.hypot(s.x - HOME.x, s.y - HOME.y) < 14;
+    if (onPad && s.battery < 100) {
+      var wasLow = s.battery < 99;
+      s.battery = Math.min(100, s.battery + 14 * dt);
+      if (s.battery >= 100 && wasLow) say('Battery topped up.');
+    }
+    if (s.battery <= 0) {
+      s.battery = 0;
+      if (!s.crashed && s.alt <= 0 && !onPad) showCrash('Battery empty away from the pad. Press R or tap below.');
+    }
+  }
+
+  draw(now);
+
+  hudTick++;
+  if (hudTick % 6 === 0) {
+    hudAlt.textContent = s.alt.toFixed(1);
+    hudSpd.textContent = Math.hypot(s.vx, s.vy).toFixed(1);
+    hudHdg.textContent = String(Math.round(((s.yaw * 180 / Math.PI) % 360 + 360) % 360)).padStart(3, '0');
+    hudBat.textContent = String(Math.round(s.battery));
+    hudScore.textContent = String(s.score);
+    hudBatFill.style.width = s.battery + '%';
+    hudBatFill.style.background = s.battery < 20 ? '#ff453a' : s.battery < 45 ? '#ffd60a' : '#30d158';
+  }
+  requestAnimationFrame(step);
+}
+requestAnimationFrame(step);
+})();
+</script>
+</body>
+</html>
