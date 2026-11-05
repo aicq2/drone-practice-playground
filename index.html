@@ -150,7 +150,7 @@
   <div class="about-card">
     <button type="button" class="about-close" id="about-close">Done</button>
     <h1>Drone practice playground</h1>
-    <p class="sub">A little quadcopter in a 3D park, so you can get a feel for the controls before you spend on a real drone. You see what the drone sees. Fly through the floating rings, and land back on the pad to recharge.</p>
+    <p class="sub">A little quadcopter on a coastal island, so you can get a feel for the controls before you spend on a real drone. You see what the drone sees. Explore the lighthouse, sailboats and seaside village. Fly through the floating rings, and land back on the pad to recharge.</p>
 
     <h2>How to fly</h2>
     <ol class="howto">
@@ -189,29 +189,25 @@ function spawnRings(existing, awayFrom) {
 }
 
 function makeWorld() {
-  var trees = [], buildings = [], tints = ['#c9d4de', '#d8d2c8', '#ccd8d2'], guard = 0;
-  while (trees.length < 64 && guard++ < 900) {
-    var x = rand(-FIELD / 2 + 40, FIELD / 2 - 40), y = rand(-FIELD / 2 + 40, FIELD / 2 - 40);
-    if (Math.hypot(x - HOME.x, y - HOME.y) < 70) continue;
-    trees.push({ x: x, y: y, r: rand(7, 14), h: rand(14, 32), shade: Math.random() });
+  var trees = [], buildings = [], clouds = [];
+  // A calm coastal island. The clear central lane stays friendly to new pilots.
+  for (var i=0;i<46;i++) {
+    var x = -340 + ((i*83)%390), y = -400 + ((i*137)%800);
+    if (x>10 || Math.hypot(x,y)<72 || (Math.abs(x)<28 && y<0)) continue;
+    trees.push({x:x,y:y,r:7+(i%5),h:15+(i%4)*4,shade:i%2});
   }
-  guard = 0;
-  while (buildings.length < 6 && guard++ < 200) {
-    var bx = rand(-FIELD / 2 + 80, FIELD / 2 - 80), by = rand(-FIELD / 2 + 80, FIELD / 2 - 80);
-    if (Math.hypot(bx - HOME.x, by - HOME.y) < 130) continue;
-    buildings.push({ x: bx, y: by, w: rand(26, 46), d: rand(26, 46), h: rand(30, 75), tint: tints[buildings.length % tints.length] });
-  }
-  var clouds = [];
-  for (var i = 0; i < 6; i++) clouds.push({ x: rand(-1400, 1400), y: rand(-1400, 1400), z: rand(160, 260), s: rand(90, 200) });
-  return { trees: trees, buildings: buildings, clouds: clouds };
+  var houses=[[-95,-105,25,28,18],[-140,-145,30,25,24],[-185,-100,28,30,20],[-220,-170,34,26,26],[-115,-240,30,27,20],[-270,70,32,28,22]];
+  houses.forEach(function(h,i){buildings.push({x:h[0],y:h[1],w:h[2],d:h[3],h:h[4],tint:['#f3e4cd','#efcab6','#d5e4de'][i%3]});});
+  for(var j=0;j<6;j++) clouds.push({x:-800+j*380,y:-900+(j%2)*350,z:180+(j%3)*40,s:90});
+  return {trees:trees,buildings:buildings,clouds:clouds};
 }
 
 var world = makeWorld();
 var sim;
 function freshSim(keepScore) {
   sim = {
-    x: HOME.x, y: HOME.y, alt: 0, vx: 0, vy: 0, valt: 0, yaw: 0,
-    battery: 100, score: keepScore, rings: spawnRings(sim ? sim.rings : [], null),
+    x: HOME.x, y: HOME.y, alt: 0, vx: 0, vy: 0, valt: 0, yaw: 0.24,
+    battery: 100, score: keepScore, rings: sim ? sim.rings : [{x:0,y:-85,alt:12,face:0},{x:20,y:-165,alt:20,face:0},{x:70,y:-250,alt:30,face:0},{x:160,y:-310,alt:42,face:0},{x:220,y:-100,alt:20,face:0}],
     crashed: null, started: false, camPitch: 0.05
   };
 }
@@ -368,27 +364,20 @@ function proj(px, py, pz, out) {
 }
 var pa = { sx: 0, sy: 0, d: 0, ok: false }, pb = { sx: 0, sy: 0, d: 0, ok: false };
 function poly(points, fill, stroke, lw) {
-  // points: array of [x,y,z]; skip if all behind camera
-  var okAny = false, i, p;
-  var sx = [], sy = [];
-  for (i = 0; i < points.length; i++) {
-    p = proj(points[i][0], points[i][1], points[i][2], PPT);
-    if (!p.ok) { sx.push(null); sy.push(null); continue; }
-    okAny = true; sx.push(PPT.sx); sy.push(PPT.sy);
+  var vertices=points.map(function(p){var dx=p[0]-cam.x,dy=p[1]-cam.y,dz=p[2]-cam.z;
+    var depth=dx*cam.fx+dy*cam.fy;
+    return [dx*cam.rx+dy*cam.ry,dz*cam.cosP-depth*cam.sinP,depth*cam.cosP+dz*cam.sinP];});
+  var clipped=[];
+  for(var i=0;i<vertices.length;i++){
+    var a=vertices[i],b=vertices[(i+1)%vertices.length],ia=a[2]>=1.2,ib=b[2]>=1.2;
+    if(ia)clipped.push(a);
+    if(ia!==ib){var t=(1.2-a[2])/(b[2]-a[2]);clipped.push([a[0]+t*(b[0]-a[0]),a[1]+t*(b[1]-a[1]),1.2]);}
   }
-  if (!okAny) return;
-  var started = false;
-  ctx.beginPath();
-  for (i = 0; i <= points.length; i++) {
-    var j = i % points.length;
-    if (sx[j] === null) { started = false; continue; }
-    if (!started) { ctx.moveTo(sx[j], sy[j]); started = true; }
-    else ctx.lineTo(sx[j], sy[j]);
-  }
-  ctx.closePath();
-  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
-  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw || 1; ctx.stroke(); }
+  if(clipped.length<3)return;
+  ctx.beginPath();clipped.forEach(function(v,i){var x=W/2+v[0]*cam.f/v[2],y=H/2-v[1]*cam.f/v[2];if(i===0)ctx.moveTo(x,y);else ctx.lineTo(x,y);});ctx.closePath();
+  if(fill){ctx.fillStyle=fill;ctx.fill();}if(stroke){ctx.strokeStyle=stroke;ctx.lineWidth=lw||1;ctx.stroke();}
 }
+
 function seg(x1, y1, z1, x2, y2, z2, color, lw) {
   var a = proj(x1, y1, z1, pa), b = proj(x2, y2, z2, pb);
   if (!a.ok && !b.ok) return;
@@ -408,6 +397,56 @@ function drawStick(c, st, labelA, labelB, r) {
   ctx.fillText(labelB, c.cx, c.cy + r + 16);
 }
 
+var landmarks=[{kind:'lighthouse',x:63,y:-175},{kind:'boat',x:190,y:-120},{kind:'boat',x:270,y:-290},{kind:'balloon',x:-110,y:-310},{kind:'balloon',x:230,y:120}];
+function disc(x,y,z,r,color){var pts=[];for(var i=0;i<24;i++){var a=i/24*Math.PI*2;pts.push([x+Math.cos(a)*r,y+Math.sin(a)*r,z]);}poly(pts,color);}
+function cylinder(x,y,z,r,h,color){
+  for(var i=0;i<12;i++){var a=i/12*Math.PI*2,b=(i+1)/12*Math.PI*2;
+    var shade=i%3===0?'#e9d7bf':color;
+    poly([[x+Math.cos(a)*r,y+Math.sin(a)*r,z],[x+Math.cos(b)*r,y+Math.sin(b)*r,z],[x+Math.cos(b)*r,y+Math.sin(b)*r,z+h],[x+Math.cos(a)*r,y+Math.sin(a)*r,z+h]],shade);}
+  disc(x,y,z+h,r,color);
+}
+function drawCoast(now){
+  // Distant mountain silhouettes sit beyond the island, then sea and sandy shore.
+  for(var m=0;m<9;m++){var x=-1350+m*360,y=-1100;
+    poly([[x-260,y,0],[x+50,y,65+(m%3)*25],[x+300,y,0]],m%2?'#b4bfc0':'#a6b8b7');}
+  poly([[90,-1800,0],[1800,-1800,0],[1800,1800,0],[90,1800,0]],'#58a7b5');
+  poly([[78,-1800,.02],[110,-1800,.02],[110,1800,.02],[78,1800,.02]],'#b5ded3');
+  poly([[55,-1800,.05],[80,-1800,.05],[80,1800,.05],[55,1800,.05]],'#efdbb6');
+  poly([[31,-450,.08],[39,-450,.08],[39,450,.08],[31,450,.08]],'#e0c9a7');
+  for(var y=-600;y<650;y+=18){
+    var drift=Math.sin(now*.0007+y)*1.4;
+    seg(94+drift,y,.15,110+drift,y+7,.15,'rgba(245,255,244,0.5)',1.5);
+    for(var q=0;q<3;q++)seg(135+q*72,y,.1,150+q*72,y+3,.1,'rgba(224,249,239,0.23)',1);
+  }
+  // Wooden pier, with distinct planks and posts.
+  poly([[64,-72,.4],[156,-72,.4],[156,-59,.4],[64,-59,.4]],'#b69a79');
+  for(var px=68;px<157;px+=7)seg(px,-72,.45,px,-59,.45,'#947a60',1);
+  for(var px2=75;px2<157;px2+=22){seg(px2,-72,0,px2,-72,3,'#e6d4b6',2);seg(px2,-59,0,px2,-59,3,'#e6d4b6',2);}
+}
+function drawLandmark(o,now){
+  var x=o.x,y=o.y;
+  if(o.kind==='lighthouse'){
+    disc(x,y,.2,19,'#d9c9a3');
+    cylinder(x,y,0,7,31,'#f5ede0');cylinder(x,y,18,7.2,5,'#cc806a');
+    cylinder(x,y,31,9,2,'#425b60');cylinder(x,y,33,6,7,'#b8d9d1');
+    disc(x,y,40,9,'#bc7660');
+    for(var i=0;i<12;i++){var a=i/12*Math.PI*2,b=(i+1)/12*Math.PI*2;poly([[x+Math.cos(a)*9,y+Math.sin(a)*9,40],[x+Math.cos(b)*9,y+Math.sin(b)*9,40],[x,y,47]],'#bb7c62');}
+  }else if(o.kind==='boat'){
+    var bob=Math.sin(now*.001+y)*.35;
+    poly([[x-5,y-12,1+bob],[x+5,y-12,1+bob],[x+7,y+6,1+bob],[x,y+15,1+bob],[x-7,y+6,1+bob]],'#f9f0dd','#7b8f90',1);
+    seg(x,y,bob,x,y,30+bob,'#8d7865',2);
+    poly([[x,y,29+bob],[x,y+11,4+bob],[x+1,y,4+bob]],'#fff7df');
+    poly([[x,y,25+bob],[x,y-10,5+bob],[x,y-1,5+bob]],'#d58d72');
+  }else{
+    var z=66+Math.sin(now*.0004+x)*3;
+    var p=proj(x,y,z,PPT);if(!p.ok)return;var sx=p.sx,sy=p.sy,rr=cam.f*11/p.d;
+    ctx.fillStyle=x<0?'#db9b7d':'#d8bb7c';ctx.beginPath();ctx.ellipse(sx,sy,rr,rr*1.25,0,0,Math.PI*2);ctx.fill();
+    ctx.fillStyle='rgba(255,245,214,.65)';ctx.beginPath();ctx.ellipse(sx,sy,rr*.35,rr*1.23,0,0,Math.PI*2);ctx.fill();
+    seg(x-3,y,z-12,x-2,y,z-19,'#8b7562',1);seg(x+3,y,z-12,x+2,y,z-19,'#8b7562',1);
+    poly([[x-3,y-3,z-19],[x+3,y-3,z-19],[x+3,y-3,z-23],[x-3,y-3,z-23]],'#97745b');
+  }
+}
+
 function draw(now, pitchIn, yawIn) {
   var s = sim;
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
@@ -422,10 +461,10 @@ function draw(now, pitchIn, yawIn) {
   var horizonY = H / 2 + cam.f * Math.tan(s.camPitch);
   var hy = Math.max(-H, Math.min(H * 2, horizonY));
   var sky = ctx.createLinearGradient(0, 0, 0, Math.max(hy, 1));
-  sky.addColorStop(0, '#a8c8e8'); sky.addColorStop(1, '#e8f0f7');
+  sky.addColorStop(0, '#8bbfd8'); sky.addColorStop(1, '#f6e8d3');
   ctx.fillStyle = sky; ctx.fillRect(0, 0, W, Math.max(0, Math.min(hy, H)));
   var gr = ctx.createLinearGradient(0, hy, 0, H);
-  gr.addColorStop(0, '#c4ccb4'); gr.addColorStop(1, '#9fae8d');
+  gr.addColorStop(0, '#c4d0ac'); gr.addColorStop(1, '#8fa978');
   ctx.fillStyle = gr; ctx.fillRect(0, Math.max(0, Math.min(hy, H)), W, H);
 
   // sun glow
@@ -446,14 +485,9 @@ function draw(now, pitchIn, yawIn) {
     ctx.beginPath(); ctx.ellipse(p.sx + sc * 0.5, p.sy + sc * 0.06, sc * 0.5, sc * 0.2, 0, 0, Math.PI * 2); ctx.fill();
   });
 
-  // ground grid
-  var k, i2;
-  for (k = -FIELD / 2; k <= FIELD / 2; k += 50) {
-    seg(k, -FIELD / 2, 0, k, FIELD / 2, 0, 'rgba(60,60,67,0.08)', 1);
-    seg(-FIELD / 2, k, 0, FIELD / 2, k, 0, 'rgba(60,60,67,0.08)', 1);
-  }
-  poly([[-FIELD / 2, -FIELD / 2, 0], [FIELD / 2, -FIELD / 2, 0], [FIELD / 2, FIELD / 2, 0], [-FIELD / 2, FIELD / 2, 0]], null, 'rgba(60,60,67,0.2)', 2);
+  drawCoast(now);
 
+  var i2;
   // landing pad
   var padPts = [];
   for (i2 = 0; i2 < 20; i2++) padPts.push([HOME.x + Math.cos(i2 / 20 * Math.PI * 2) * 14, HOME.y + Math.sin(i2 / 20 * Math.PI * 2) * 14, 0]);
@@ -489,6 +523,7 @@ function draw(now, pitchIn, yawIn) {
     var p = proj(r.x, r.y, r.alt, PPT);
     if (p.ok && p.d < 900) items.push({ d: p.d, kind: 2, o: r });
   });
+  landmarks.forEach(function(o){var p=proj(o.x,o.y,18,PPT);if(p.ok)items.push({d:p.d,kind:3,o:o});});
   items.sort(function (a, b) { return b.d - a.d; });
   items.forEach(function (it) {
     if (it.kind === 0) {
@@ -510,9 +545,12 @@ function draw(now, pitchIn, yawIn) {
     } else if (it.kind === 1) {
       var b = it.o, hw = b.w / 2, hd = b.d / 2;
       var sxn = cam.x < b.x ? -1 : 1, syn = cam.y < b.y ? -1 : 1;
-      poly([[b.x + sxn * hw, b.y - hd, 0], [b.x + sxn * hw, b.y + hd, 0], [b.x + sxn * hw, b.y + hd, b.h], [b.x + sxn * hw, b.y - hd, b.h]], 'rgba(118,128,140,0.9)', 'rgba(255,255,255,0.35)', 1);
-      poly([[b.x - hw, b.y + syn * hd, 0], [b.x + hw, b.y + syn * hd, 0], [b.x + hw, b.y + syn * hd, b.h], [b.x - hw, b.y + syn * hd, b.h]], 'rgba(138,148,160,0.9)', 'rgba(255,255,255,0.35)', 1);
+      poly([[b.x + sxn * hw, b.y - hd, 0], [b.x + sxn * hw, b.y + hd, 0], [b.x + sxn * hw, b.y + hd, b.h], [b.x + sxn * hw, b.y - hd, b.h]], '#c3aa91', 'rgba(255,255,255,0.35)', 1);
+      poly([[b.x - hw, b.y + syn * hd, 0], [b.x + hw, b.y + syn * hd, 0], [b.x + hw, b.y + syn * hd, b.h], [b.x - hw, b.y + syn * hd, b.h]], '#f2e4cf', 'rgba(255,255,255,0.35)', 1);
       poly([[b.x - hw, b.y - hd, b.h], [b.x + hw, b.y - hd, b.h], [b.x + hw, b.y + hd, b.h], [b.x - hw, b.y + hd, b.h]], b.tint, 'rgba(255,255,255,0.6)', 1);
+      poly([[b.x-hw,b.y-hd,b.h],[b.x+hw,b.y-hd,b.h],[b.x+hw,b.y,b.h+8],[b.x-hw,b.y,b.h+8]], '#b97d66');
+      poly([[b.x-hw,b.y,b.h+8],[b.x+hw,b.y,b.h+8],[b.x+hw,b.y+hd,b.h],[b.x-hw,b.y+hd,b.h]], '#dfac8a');
+    } else if(it.kind === 3) { drawLandmark(it.o,now);
     } else {
       var r = it.o, pts = [];
       var ux = Math.cos(r.face), uy = Math.sin(r.face);
@@ -535,6 +573,8 @@ function draw(now, pitchIn, yawIn) {
     }
   });
 
+  ctx.fillStyle='rgba(32,63,66,0.65)';ctx.font='500 11px -apple-system,system-ui,sans-serif';ctx.textAlign='center';
+  ctx.fillText('C O A S T A L   E X P L O R E R',W/2,Math.max(150,safeTop+140));
   // crosshair
   ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 1.5;
   ctx.beginPath();
