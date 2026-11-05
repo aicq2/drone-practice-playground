@@ -175,6 +175,12 @@ function freshSim(keepScore) {
 }
 freshSim(0);
 
+window.__dp = {
+  state: function () { var s = sim; return { x: s.x, y: s.y, alt: s.alt, yaw: s.yaw, score: s.score, crashed: s.crashed, battery: Math.round(s.battery), started: s.started }; },
+  rings: function () { return sim.rings.map(function (r) { return { x: r.x, y: r.y, alt: r.alt }; }); },
+  place: function (x, y, alt, yaw) { var s = sim; s.x = x; s.y = y; s.alt = alt; s.yaw = yaw; s.vx = 0; s.vy = 0; s.valt = 0; }
+};
+
 var wrap = document.getElementById('wrap');
 var canvas = document.getElementById('canvas');
 var ctx = canvas.getContext('2d');
@@ -548,8 +554,9 @@ function step(now) {
     s.battery -= (0.06 + work * 0.12) * dt * (s.alt > 0.01 ? 1.6 : 1);
     var onPad = s.alt <= 0.01 && Math.hypot(s.x - HOME.x, s.y - HOME.y) < 14;
     if (onPad && s.battery < 100) {
+      var wasLow = s.battery < 99;
       s.battery = Math.min(100, s.battery + 14 * dt);
-      if (s.battery >= 100) say('Battery topped up.');
+      if (s.battery >= 100 && wasLow) say('Battery topped up.');
     }
     if (s.battery <= 0) {
       s.battery = 0;
