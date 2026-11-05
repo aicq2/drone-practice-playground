@@ -9,9 +9,7 @@
   :root { color-scheme: light; }
   * { box-sizing: border-box; }
   body {
-    margin: 0;
-    background: #f5f5f7;
-    color: #1d1d1f;
+    margin: 0; background: #f5f5f7; color: #1d1d1f;
     font: 400 16px/1.5 -apple-system, BlinkMacSystemFont, "SF Pro Text", "Segoe UI", Roboto, sans-serif;
     -webkit-font-smoothing: antialiased;
   }
@@ -23,10 +21,18 @@
     position: relative; width: 100%; height: 560px;
     border-radius: 20px; overflow: hidden;
     box-shadow: inset 0 0 0 1px rgba(60,60,67,0.12), 0 18px 50px rgba(0,0,0,0.08);
-    background: #e6e3da;
+    background: #dfe9f3;
+    touch-action: none;
+    -webkit-user-select: none; user-select: none;
+    -webkit-touch-callout: none;
   }
-  .sim-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; display: block; }
-  .sim-hud { position: absolute; display: flex; gap: 8px; flex-wrap: wrap; pointer-events: none; }
+  .sim-canvas {
+    position: absolute; inset: 0; width: 100%; height: 100%; display: block;
+    touch-action: none;
+    -webkit-user-select: none; user-select: none;
+    -webkit-touch-callout: none; -webkit-tap-highlight-color: transparent;
+  }
+  .sim-hud { position: absolute; display: flex; gap: 8px; flex-wrap: wrap; pointer-events: none; -webkit-user-select: none; user-select: none; }
   .sim-hud-top { top: 10px; left: 10px; right: 10px; justify-content: center; }
   .sim-pill {
     display: inline-flex; align-items: center; gap: 5px;
@@ -43,7 +49,7 @@
   .sim-toast {
     position: absolute; top: 52px; left: 50%; transform: translateX(-50%);
     padding: 8px 16px; border-radius: 999px; background: rgba(29,29,31,0.82); color: #fff;
-    font-size: 13px; font-weight: 500; pointer-events: none;
+    font-size: 13px; font-weight: 500; pointer-events: none; white-space: nowrap;
     -webkit-backdrop-filter: blur(10px); backdrop-filter: blur(10px);
   }
   .sim-overlay {
@@ -66,7 +72,6 @@
   }
   .sim-button:active { background: #0066cc; }
   @media (max-width: 600px) {
-    .sim-wrap { height: 440px; }
     .sim-wrap .sim-hud.sim-hud-keys { display: none; }
   }
   ol.howto { padding-left: 22px; }
@@ -83,7 +88,7 @@
 <body>
 <div class="page">
   <h1>Drone practice playground</h1>
-  <p class="sub">A little quadcopter in a park, so you can get a feel for the controls before you spend on a real drone. Fly through the floating rings, and land back on the pad to recharge.</p>
+  <p class="sub">A little quadcopter in a 3D park, so you can get a feel for the controls before you spend on a real drone. You see what the drone sees. Fly through the floating rings, and land back on the pad to recharge.</p>
 
   <div class="sim-wrap" id="wrap">
     <canvas class="sim-canvas" id="canvas" aria-label="Drone flight playground"></canvas>
@@ -110,8 +115,8 @@
   <ol class="howto">
     <li><b>Lift off.</b> On your phone, push the left stick up. On your Mac, hold R. Down is F, or pull the stick down.</li>
     <li><b>Turn.</b> Left stick sideways, or Q and E on the keyboard.</li>
-    <li><b>Move.</b> Right stick glides you forward, back and sideways. On the keyboard use W A S D or the arrow keys.</li>
-    <li><b>Score.</b> Fly through a ring at its height to collect it. Watch the altitude readout at the top.</li>
+    <li><b>Move.</b> Right stick glides you forward, back and sideways, and the view follows the drone. On the keyboard use W A S D or the arrow keys.</li>
+    <li><b>Score.</b> Fly through the middle of a blue ring to collect it. Watch the altitude readout at the top.</li>
     <li><b>Recharge.</b> The battery drains as you fly. Land gently on the H pad to top it up.</li>
   </ol>
 
@@ -122,11 +127,10 @@
 
   <footer>Made 5 Nov 2026. Nothing is tracked or sent from this page.</footer>
 </div>
-
 <script>
 (function () {
 'use strict';
-var FIELD = 900, CLIMB = 7, ACC = 30, DRAG = 1.8, YAW_RATE = 2.6;
+var FIELD = 900, CLIMB = 7, ACC = 30, DRAG = 1.8, YAW_RATE = 2.6, MAX_ALT = 60;
 var HOME = { x: 0, y: 0 };
 function rand(min, max) { return min + Math.random() * (max - min); }
 
@@ -137,14 +141,14 @@ function spawnRings(existing, awayFrom) {
     if (awayFrom && Math.hypot(x - awayFrom.x, y - awayFrom.y) < 120) continue;
     if (Math.hypot(x - HOME.x, y - HOME.y) < 60) continue;
     if (rings.some(function (r) { return Math.hypot(r.x - x, r.y - y) < 90; })) continue;
-    rings.push({ x: x, y: y, alt: [12, 20, 30, 42][Math.floor(Math.random() * 4)] });
+    rings.push({ x: x, y: y, alt: [12, 20, 30, 42][Math.floor(Math.random() * 4)], face: rand(0, Math.PI) });
   }
   return rings;
 }
 
 function makeWorld() {
   var trees = [], buildings = [], tints = ['#c9d4de', '#d8d2c8', '#ccd8d2'], guard = 0;
-  while (trees.length < 56 && guard++ < 800) {
+  while (trees.length < 64 && guard++ < 900) {
     var x = rand(-FIELD / 2 + 40, FIELD / 2 - 40), y = rand(-FIELD / 2 + 40, FIELD / 2 - 40);
     if (Math.hypot(x - HOME.x, y - HOME.y) < 70) continue;
     trees.push({ x: x, y: y, r: rand(7, 14), h: rand(14, 32), shade: Math.random() });
@@ -155,7 +159,9 @@ function makeWorld() {
     if (Math.hypot(bx - HOME.x, by - HOME.y) < 130) continue;
     buildings.push({ x: bx, y: by, w: rand(26, 46), d: rand(26, 46), h: rand(30, 75), tint: tints[buildings.length % tints.length] });
   }
-  return { trees: trees, buildings: buildings };
+  var clouds = [];
+  for (var i = 0; i < 6; i++) clouds.push({ x: rand(-1400, 1400), y: rand(-1400, 1400), z: rand(160, 260), s: rand(90, 200) });
+  return { trees: trees, buildings: buildings, clouds: clouds };
 }
 
 var world = makeWorld();
@@ -164,15 +170,22 @@ function freshSim(keepScore) {
   sim = {
     x: HOME.x, y: HOME.y, alt: 0, vx: 0, vy: 0, valt: 0, yaw: 0,
     battery: 100, score: keepScore, rings: spawnRings(sim ? sim.rings : [], null),
-    trees: world.trees, buildings: world.buildings, crashed: null, started: false
+    crashed: null, started: false, camPitch: 0.05
   };
 }
 freshSim(0);
 
-var canvas = document.getElementById('canvas'), wrap = document.getElementById('wrap');
+var wrap = document.getElementById('wrap');
+var canvas = document.getElementById('canvas');
 var ctx = canvas.getContext('2d');
 var W = 0, H = 0, DPR = 1;
 function fit() {
+  if (wrap.clientWidth < 620) {
+    var hh = Math.round(Math.min(window.innerHeight * 0.66, 620));
+    wrap.style.height = Math.max(hh, 380) + 'px';
+  } else {
+    wrap.style.height = '560px';
+  }
   DPR = Math.min(window.devicePixelRatio || 1, 2);
   W = wrap.clientWidth; H = wrap.clientHeight;
   canvas.width = Math.round(W * DPR); canvas.height = Math.round(H * DPR);
@@ -180,6 +193,7 @@ function fit() {
 fit();
 if (window.ResizeObserver) new ResizeObserver(fit).observe(wrap);
 window.addEventListener('resize', fit);
+window.addEventListener('orientationchange', function () { setTimeout(fit, 250); });
 
 var hudAlt = document.getElementById('hud-alt'), hudSpd = document.getElementById('hud-spd'),
     hudHdg = document.getElementById('hud-hdg'), hudBat = document.getElementById('hud-bat'),
@@ -197,9 +211,14 @@ function say(msg) {
 function showCrash(msg) {
   sim.crashed = msg; crashText.textContent = msg; overlay.hidden = false;
 }
-document.getElementById('reset').addEventListener('click', function () {
+function resetSim() {
   freshSim(sim.score); overlay.hidden = true; say('Back on the pad. Off you go.');
-});
+}
+document.getElementById('reset').addEventListener('click', resetSim);
+
+wrap.addEventListener('selectstart', function (e) { e.preventDefault(); });
+wrap.addEventListener('gesturestart', function (e) { e.preventDefault(); });
+wrap.addEventListener('contextmenu', function (e) { e.preventDefault(); });
 
 var keys = {};
 var KEYMAP = {
@@ -209,17 +228,15 @@ var KEYMAP = {
   KeyQ: 'yaw-', KeyE: 'yaw+'
 };
 window.addEventListener('keydown', function (e) {
-  if (e.code === 'KeyR' && sim.crashed) {
-    freshSim(sim.score); overlay.hidden = true; say('Back on the pad. Off you go.');
-    e.preventDefault(); return;
-  }
+  if (e.code === 'KeyR' && sim.crashed) { resetSim(); e.preventDefault(); return; }
   if (KEYMAP[e.code]) { keys[KEYMAP[e.code]] = true; e.preventDefault(); }
 });
 window.addEventListener('keyup', function (e) { if (KEYMAP[e.code]) keys[KEYMAP[e.code]] = false; });
+window.addEventListener('blur', function () { keys = {}; sticks.left.active = -1; sticks.left.vx = 0; sticks.left.vy = 0; sticks.right.active = -1; sticks.right.vx = 0; sticks.right.vy = 0; });
 
 var sticks = { left: { active: -1, vx: 0, vy: 0 }, right: { active: -1, vx: 0, vy: 0 } };
 function stickGeom() {
-  var r = Math.min(62, Math.max(48, W * 0.09)), pad = 24;
+  var r = Math.min(66, Math.max(52, W * 0.11)), pad = 20;
   return { r: r, left: { cx: pad + r, cy: H - pad - r }, right: { cx: W - pad - r, cy: H - pad - r } };
 }
 function pointerPos(e) {
@@ -241,17 +258,63 @@ canvas.addEventListener('pointerdown', function (e) {
   s.active = e.pointerId;
   try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
   applyStick(side, p); e.preventDefault();
-});
+}, { passive: false });
 canvas.addEventListener('pointermove', function (e) {
   if (sticks.left.active === e.pointerId) applyStick('left', pointerPos(e));
   else if (sticks.right.active === e.pointerId) applyStick('right', pointerPos(e));
-});
+}, { passive: false });
 function stickUp(e) {
   if (sticks.left.active === e.pointerId) { sticks.left.active = -1; sticks.left.vx = 0; sticks.left.vy = 0; }
   if (sticks.right.active === e.pointerId) { sticks.right.active = -1; sticks.right.vx = 0; sticks.right.vy = 0; }
 }
 canvas.addEventListener('pointerup', stickUp);
 canvas.addEventListener('pointercancel', stickUp);
+
+// ---- tiny 3D renderer (no libraries) ----
+var cam = { x: 0, y: 0, z: 0, sinY: 0, cosY: 1, sinP: 0, cosP: 1, f: 500 };
+var PPT = { sx: 0, sy: 0, d: 0, ok: false };
+function proj(px, py, pz, out) {
+  var dx = px - cam.x, dy = py - cam.y, dz = pz - cam.z;
+  var depth = dx * cam.fx + dy * cam.fy;
+  var lat = dx * cam.rx + dy * cam.ry;
+  var d2 = depth * cam.cosP + dz * cam.sinP;
+  var z2 = dz * cam.cosP - depth * cam.sinP;
+  if (d2 < 1.2) { out.ok = false; return out; }
+  out.ok = true; out.d = d2;
+  out.sx = W / 2 + lat * cam.f / d2;
+  out.sy = H / 2 - z2 * cam.f / d2;
+  return out;
+}
+var pa = { sx: 0, sy: 0, d: 0, ok: false }, pb = { sx: 0, sy: 0, d: 0, ok: false };
+function poly(points, fill, stroke, lw) {
+  // points: array of [x,y,z]; skip if all behind camera
+  var okAny = false, i, p;
+  var sx = [], sy = [];
+  for (i = 0; i < points.length; i++) {
+    p = proj(points[i][0], points[i][1], points[i][2], PPT);
+    if (!p.ok) { sx.push(null); sy.push(null); continue; }
+    okAny = true; sx.push(PPT.sx); sy.push(PPT.sy);
+  }
+  if (!okAny) return;
+  var started = false;
+  ctx.beginPath();
+  for (i = 0; i <= points.length; i++) {
+    var j = i % points.length;
+    if (sx[j] === null) { started = false; continue; }
+    if (!started) { ctx.moveTo(sx[j], sy[j]); started = true; }
+    else ctx.lineTo(sx[j], sy[j]);
+  }
+  ctx.closePath();
+  if (fill) { ctx.fillStyle = fill; ctx.fill(); }
+  if (stroke) { ctx.strokeStyle = stroke; ctx.lineWidth = lw || 1; ctx.stroke(); }
+}
+function seg(x1, y1, z1, x2, y2, z2, color, lw) {
+  var a = proj(x1, y1, z1, pa), b = proj(x2, y2, z2, pb);
+  if (!a.ok && !b.ok) return;
+  if (!a.ok || !b.ok) return; // short segments only; skip partial
+  ctx.strokeStyle = color; ctx.lineWidth = lw;
+  ctx.beginPath(); ctx.moveTo(a.sx, a.sy); ctx.lineTo(b.sx, b.sy); ctx.stroke();
+}
 
 function drawStick(c, st, labelA, labelB, r) {
   ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.strokeStyle = 'rgba(60,60,67,0.25)'; ctx.lineWidth = 1.5;
@@ -260,124 +323,149 @@ function drawStick(c, st, labelA, labelB, r) {
   ctx.fillStyle = 'rgba(255,255,255,0.9)'; ctx.strokeStyle = 'rgba(60,60,67,0.45)';
   ctx.beginPath(); ctx.arc(kx, ky, r * 0.38, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
   ctx.fillStyle = 'rgba(60,60,67,0.5)'; ctx.font = '500 10px -apple-system, system-ui, sans-serif'; ctx.textAlign = 'center';
-  ctx.fillText(labelA, c.cx, c.cy - r - 14);
-  ctx.fillText(labelB, c.cx, c.cy + r + 18);
+  ctx.fillText(labelA, c.cx, c.cy - r - 12);
+  ctx.fillText(labelB, c.cx, c.cy + r + 16);
 }
 
-function draw(now) {
+function draw(now, pitchIn, yawIn) {
   var s = sim;
   ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-  var zoom = 1 / (1 + s.alt * 0.0075);
-  var scale = (W / 130) * zoom, persp = 0.45;
-  var g = ctx.createLinearGradient(0, 0, 0, H);
-  g.addColorStop(0, '#eef0ee'); g.addColorStop(1, '#e6e3da');
-  ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
-  function sx(x) { return W / 2 + (x - s.x) * scale; }
-  function sy(y, height) { return H / 2 + (y - s.y) * scale - height * scale * persp; }
+  var targetPitch = 0.06 + pitchIn * 0.16;
+  s.camPitch += (targetPitch - s.camPitch) * 0.12;
+  cam.x = s.x; cam.y = s.y; cam.z = s.alt + 1.6;
+  cam.fx = Math.sin(s.yaw); cam.fy = -Math.cos(s.yaw);
+  cam.rx = Math.cos(s.yaw); cam.ry = Math.sin(s.yaw);
+  cam.sinP = Math.sin(s.camPitch); cam.cosP = Math.cos(s.camPitch);
+  cam.f = H * 0.95;
 
-  ctx.strokeStyle = 'rgba(60,60,67,0.14)'; ctx.lineWidth = 2; ctx.setLineDash([10, 8]);
-  ctx.strokeRect(sx(-FIELD / 2), sy(FIELD / 2, 0), FIELD * scale, FIELD * scale);
-  ctx.setLineDash([]);
+  var horizonY = H / 2 + cam.f * Math.tan(s.camPitch);
+  var hy = Math.max(-H, Math.min(H * 2, horizonY));
+  var sky = ctx.createLinearGradient(0, 0, 0, Math.max(hy, 1));
+  sky.addColorStop(0, '#a8c8e8'); sky.addColorStop(1, '#e8f0f7');
+  ctx.fillStyle = sky; ctx.fillRect(0, 0, W, Math.max(0, Math.min(hy, H)));
+  var gr = ctx.createLinearGradient(0, hy, 0, H);
+  gr.addColorStop(0, '#c4ccb4'); gr.addColorStop(1, '#9fae8d');
+  ctx.fillStyle = gr; ctx.fillRect(0, Math.max(0, Math.min(hy, H)), W, H);
 
-  ctx.fillStyle = 'rgba(168,198,159,0.35)';
-  for (var i = 0; i < 22; i++) {
-    var px = Math.sin(i * 999.7) * 0.5 * FIELD * 0.8, py = Math.cos(i * 654.3) * 0.5 * FIELD * 0.8;
-    ctx.beginPath(); ctx.ellipse(sx(px), sy(py, 0), 60 * scale, 42 * scale, i, 0, Math.PI * 2); ctx.fill();
+  // sun glow
+  var sun = proj(cam.x + Math.sin(0.7) * 2000, cam.y - Math.cos(0.7) * 2000, cam.z + 900, PPT);
+  if (sun.ok) {
+    var sg = ctx.createRadialGradient(sun.sx, sun.sy, 0, sun.sx, sun.sy, 140);
+    sg.addColorStop(0, 'rgba(255,255,255,0.85)'); sg.addColorStop(0.25, 'rgba(255,250,235,0.5)'); sg.addColorStop(1, 'rgba(255,250,235,0)');
+    ctx.fillStyle = sg; ctx.beginPath(); ctx.arc(sun.sx, sun.sy, 140, 0, Math.PI * 2); ctx.fill();
   }
-  ctx.strokeStyle = 'rgba(255,255,255,0.75)'; ctx.lineWidth = 7 * scale;
-  ctx.beginPath();
-  ctx.moveTo(sx(-FIELD / 2), sy(120, 0)); ctx.lineTo(sx(FIELD / 2), sy(120, 0));
-  ctx.moveTo(sx(160, 0), sy(-FIELD / 2, 0)); ctx.lineTo(sx(160, 0), sy(FIELD / 2, 0));
-  ctx.stroke();
+  // clouds
+  world.clouds.forEach(function (c) {
+    var p = proj(c.x, c.y, c.z, PPT);
+    if (!p.ok || p.d > 3000) return;
+    var sc = cam.f * c.s / p.d;
+    ctx.fillStyle = 'rgba(255,255,255,0.75)';
+    ctx.beginPath(); ctx.ellipse(p.sx, p.sy, sc, sc * 0.32, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(p.sx - sc * 0.5, p.sy + sc * 0.08, sc * 0.55, sc * 0.22, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.ellipse(p.sx + sc * 0.5, p.sy + sc * 0.06, sc * 0.5, sc * 0.2, 0, 0, Math.PI * 2); ctx.fill();
+  });
 
-  ctx.fillStyle = 'rgba(60,60,67,0.08)';
-  ctx.beginPath(); ctx.ellipse(sx(HOME.x), sy(HOME.y, 0), 14 * scale, 14 * scale, 0, 0, Math.PI * 2); ctx.fill();
-  ctx.strokeStyle = 'rgba(60,60,67,0.35)'; ctx.lineWidth = 2;
-  ctx.beginPath(); ctx.ellipse(sx(HOME.x), sy(HOME.y, 0), 12 * scale, 12 * scale, 0, 0, Math.PI * 2); ctx.stroke();
-  ctx.fillStyle = 'rgba(60,60,67,0.45)';
-  ctx.font = '600 ' + Math.max(10, 8 * scale) + 'px -apple-system, system-ui, sans-serif';
-  ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-  ctx.fillText('H', sx(HOME.x), sy(HOME.y, 0));
+  // ground grid
+  var k, i2;
+  for (k = -FIELD / 2; k <= FIELD / 2; k += 50) {
+    seg(k, -FIELD / 2, 0, k, FIELD / 2, 0, 'rgba(60,60,67,0.08)', 1);
+    seg(-FIELD / 2, k, 0, FIELD / 2, k, 0, 'rgba(60,60,67,0.08)', 1);
+  }
+  poly([[-FIELD / 2, -FIELD / 2, 0], [FIELD / 2, -FIELD / 2, 0], [FIELD / 2, FIELD / 2, 0], [-FIELD / 2, FIELD / 2, 0]], null, 'rgba(60,60,67,0.2)', 2);
 
+  // landing pad
+  var padPts = [];
+  for (i2 = 0; i2 < 20; i2++) padPts.push([HOME.x + Math.cos(i2 / 20 * Math.PI * 2) * 14, HOME.y + Math.sin(i2 / 20 * Math.PI * 2) * 14, 0]);
+  poly(padPts, 'rgba(255,255,255,0.85)', 'rgba(60,60,67,0.35)', 2);
+  var hp = proj(HOME.x, HOME.y, 0.1, PPT);
+  if (hp.ok) {
+    ctx.fillStyle = 'rgba(60,60,67,0.55)';
+    ctx.font = '600 ' + Math.max(8, Math.min(40, cam.f * 6 / hp.d)) + 'px -apple-system, system-ui, sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText('H', hp.sx, hp.sy);
+    ctx.textBaseline = 'alphabetic';
+  }
+
+  // drone shadow
+  var sh = proj(s.x, s.y, 0.05, PPT);
+  if (sh.ok) {
+    var shr = Math.max(2, cam.f * 3.5 / sh.d);
+    ctx.fillStyle = 'rgba(60,60,67,' + Math.max(0.05, 0.35 - s.alt * 0.006) + ')';
+    ctx.beginPath(); ctx.ellipse(sh.sx, sh.sy, shr * 1.5, shr * 0.7, 0, 0, Math.PI * 2); ctx.fill();
+  }
+
+  // painter's list
+  var items = [];
+  world.trees.forEach(function (t) {
+    var p = proj(t.x, t.y, 0, PPT);
+    if (p.ok && p.d < 900) items.push({ d: p.d, kind: 0, o: t });
+  });
+  world.buildings.forEach(function (b) {
+    var p = proj(b.x, b.y, 0, PPT);
+    if (p.ok && p.d < 1100) items.push({ d: p.d, kind: 1, o: b });
+  });
   s.rings.forEach(function (r) {
-    var rx = sx(r.x), ryG = sy(r.y, 0), ryA = sy(r.y, r.alt), rr = 11 * scale;
-    ctx.strokeStyle = 'rgba(10,132,255,0.25)'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 5]);
-    ctx.beginPath(); ctx.moveTo(rx, ryG); ctx.lineTo(rx, ryA); ctx.stroke(); ctx.setLineDash([]);
-    ctx.strokeStyle = '#0a84ff'; ctx.lineWidth = Math.max(2.5, 0.9 * scale);
-    ctx.beginPath(); ctx.ellipse(rx, ryA, rr, rr * 0.62, 0, 0, Math.PI * 2); ctx.stroke();
-    ctx.fillStyle = 'rgba(10,132,255,0.85)';
-    ctx.font = '600 ' + Math.max(9, 5 * scale) + 'px -apple-system, system-ui, sans-serif';
-    ctx.fillText(r.alt + ' m', rx, ryA - rr * 0.62 - 6);
+    var p = proj(r.x, r.y, r.alt, PPT);
+    if (p.ok && p.d < 900) items.push({ d: p.d, kind: 2, o: r });
+  });
+  items.sort(function (a, b) { return b.d - a.d; });
+  items.forEach(function (it) {
+    if (it.kind === 0) {
+      var t = it.o;
+      var tb = proj(t.x, t.y, 0, pa);
+      var tt = proj(t.x, t.y, t.h, pb);
+      if (!tb.ok || !tt.ok) return;
+      var lwT = Math.max(1, Math.min(6, cam.f * 0.9 / it.d));
+      ctx.strokeStyle = '#8a6f55'; ctx.lineWidth = lwT;
+      ctx.beginPath(); ctx.moveTo(tb.sx, tb.sy); ctx.lineTo(tt.sx, tt.sy); ctx.stroke();
+      var col = t.shade > 0.5 ? 'rgba(96,138,86,0.95)' : 'rgba(120,158,102,0.95)';
+      [0.98, 0.78, 0.58].forEach(function (frac, idx) {
+        var cp = proj(t.x, t.y, t.h * frac, PPT);
+        if (!cp.ok) return;
+        var rr = cam.f * t.r * (1.05 - idx * 0.3) / it.d;
+        ctx.fillStyle = col;
+        ctx.beginPath(); ctx.ellipse(cp.sx, cp.sy, rr, rr * 0.85, 0, 0, Math.PI * 2); ctx.fill();
+      });
+    } else if (it.kind === 1) {
+      var b = it.o, hw = b.w / 2, hd = b.d / 2;
+      var sxn = cam.x < b.x ? -1 : 1, syn = cam.y < b.y ? -1 : 1;
+      poly([[b.x + sxn * hw, b.y - hd, 0], [b.x + sxn * hw, b.y + hd, 0], [b.x + sxn * hw, b.y + hd, b.h], [b.x + sxn * hw, b.y - hd, b.h]], 'rgba(118,128,140,0.9)', 'rgba(255,255,255,0.35)', 1);
+      poly([[b.x - hw, b.y + syn * hd, 0], [b.x + hw, b.y + syn * hd, 0], [b.x + hw, b.y + syn * hd, b.h], [b.x - hw, b.y + syn * hd, b.h]], 'rgba(138,148,160,0.9)', 'rgba(255,255,255,0.35)', 1);
+      poly([[b.x - hw, b.y - hd, b.h], [b.x + hw, b.y - hd, b.h], [b.x + hw, b.y + hd, b.h], [b.x - hw, b.y + hd, b.h]], b.tint, 'rgba(255,255,255,0.6)', 1);
+    } else {
+      var r = it.o, pts = [];
+      var ux = Math.cos(r.face), uy = Math.sin(r.face);
+      for (var a2 = 0; a2 < 26; a2++) {
+        var th = a2 / 26 * Math.PI * 2;
+        pts.push([r.x + Math.cos(th) * 7 * ux, r.y + Math.sin(th) * 7 * uy, r.alt + Math.sin(th) * 7]);
+      }
+      var base = proj(r.x, r.y, 0, pa), ctr = proj(r.x, r.y, r.alt, pb);
+      if (base.ok && ctr.ok) {
+        ctx.strokeStyle = 'rgba(10,132,255,0.3)'; ctx.lineWidth = 1.5; ctx.setLineDash([4, 5]);
+        ctx.beginPath(); ctx.moveTo(base.sx, base.sy); ctx.lineTo(ctr.sx, ctr.sy); ctx.stroke(); ctx.setLineDash([]);
+      }
+      poly(pts, null, '#0a84ff', Math.max(2, Math.min(6, cam.f * 0.35 / it.d)));
+      if (ctr.ok) {
+        ctx.fillStyle = 'rgba(10,132,255,0.9)';
+        ctx.font = '600 ' + Math.max(9, Math.min(16, cam.f * 2.2 / it.d)) + 'px -apple-system, system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.fillText(r.alt + ' m', ctr.sx, ctr.sy - cam.f * 8.5 / it.d);
+      }
+    }
   });
 
-  s.trees.forEach(function (t) {
-    var tx = sx(t.x), tyG = sy(t.y, 0);
-    ctx.fillStyle = 'rgba(60,60,67,0.10)';
-    ctx.beginPath(); ctx.ellipse(tx + 3, tyG + 2, t.r * scale, t.r * scale * 0.8, 0, 0, Math.PI * 2); ctx.fill();
-    var tyA = sy(t.y, t.h * 0.75);
-    ctx.fillStyle = t.shade > 0.5 ? '#7fa873' : '#93b784';
-    ctx.beginPath(); ctx.ellipse(tx, tyA, t.r * scale, t.r * scale * 0.85, 0, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = 'rgba(255,255,255,0.25)';
-    ctx.beginPath(); ctx.ellipse(tx - t.r * scale * 0.25, tyA - t.r * scale * 0.25, t.r * scale * 0.45, t.r * scale * 0.35, 0, 0, Math.PI * 2); ctx.fill();
-  });
-
-  s.buildings.forEach(function (b) {
-    var bx = sx(b.x), byG = sy(b.y, 0), byA = sy(b.y, b.h), hw = b.w * scale / 2, hd = b.d * scale / 2;
-    ctx.fillStyle = 'rgba(60,60,67,0.12)'; ctx.fillRect(bx - hw + 4, byG - hd + 4, hw * 2, hd * 2);
-    ctx.fillStyle = 'rgba(120,130,140,0.55)';
-    ctx.beginPath();
-    ctx.moveTo(bx - hw, byG - hd); ctx.lineTo(bx + hw, byG - hd);
-    ctx.lineTo(bx + hw, byA - hd); ctx.lineTo(bx - hw, byA - hd);
-    ctx.closePath(); ctx.fill();
-    ctx.fillStyle = 'rgba(100,110,120,0.65)';
-    ctx.beginPath();
-    ctx.moveTo(bx + hw, byG - hd); ctx.lineTo(bx + hw, byG + hd);
-    ctx.lineTo(bx + hw, byA + hd); ctx.lineTo(bx + hw, byA - hd);
-    ctx.closePath(); ctx.fill();
-    ctx.fillStyle = b.tint; ctx.fillRect(bx - hw, byA - hd, hw * 2, hd * 2);
-    ctx.strokeStyle = 'rgba(255,255,255,0.6)'; ctx.lineWidth = 1;
-    ctx.strokeRect(bx - hw, byA - hd, hw * 2, hd * 2);
-    ctx.fillStyle = 'rgba(60,60,67,0.5)';
-    ctx.font = '500 ' + Math.max(8, 4 * scale) + 'px -apple-system, system-ui, sans-serif';
-    ctx.fillText((b.h | 0) + ' m', bx, byA + hd + 10);
-  });
-
-  var dAlpha = Math.max(0.05, 0.3 - s.alt * 0.004);
-  ctx.fillStyle = 'rgba(60,60,67,' + dAlpha + ')';
-  var shR = Math.max(3, 5 * scale * (1 - Math.min(s.alt, 80) * 0.006));
-  ctx.beginPath(); ctx.ellipse(W / 2 + 4, H / 2 + 3, shR * 1.6, shR, 0, 0, Math.PI * 2); ctx.fill();
-
-  var dy = H / 2 - s.alt * scale * persp, dx = W / 2;
-  var body = Math.max(6, 4.4 * scale);
-  ctx.save(); ctx.translate(dx, dy); ctx.rotate(s.yaw);
-  var arm = body * 1.35;
-  ctx.strokeStyle = '#3a3a3c'; ctx.lineWidth = Math.max(2, body * 0.28);
+  // crosshair
+  ctx.strokeStyle = 'rgba(255,255,255,0.8)'; ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.moveTo(-arm, -arm); ctx.lineTo(arm, arm); ctx.moveTo(arm, -arm); ctx.lineTo(-arm, arm);
+  ctx.moveTo(W / 2 - 10, H / 2); ctx.lineTo(W / 2 - 3, H / 2);
+  ctx.moveTo(W / 2 + 3, H / 2); ctx.lineTo(W / 2 + 10, H / 2);
+  ctx.moveTo(W / 2, H / 2 - 10); ctx.lineTo(W / 2, H / 2 - 3);
+  ctx.moveTo(W / 2, H / 2 + 3); ctx.lineTo(W / 2, H / 2 + 10);
   ctx.stroke();
-  var spin = now / 90;
-  [[-arm, -arm], [arm, -arm], [-arm, arm], [arm, arm]].forEach(function (p) {
-    ctx.fillStyle = 'rgba(255,255,255,0.85)'; ctx.strokeStyle = 'rgba(60,60,67,0.55)'; ctx.lineWidth = 1.5;
-    ctx.beginPath(); ctx.arc(p[0], p[1], body * 0.85, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
-    ctx.strokeStyle = 'rgba(60,60,67,0.8)'; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.arc(p[0], p[1], body * 0.55, spin, spin + 1.6); ctx.stroke();
-    ctx.beginPath(); ctx.arc(p[0], p[1], body * 0.55, spin + Math.PI, spin + Math.PI + 1.6); ctx.stroke();
-  });
-  ctx.fillStyle = '#ffffff'; ctx.strokeStyle = 'rgba(60,60,67,0.6)'; ctx.lineWidth = 1.5;
-  var br = body * 0.5;
-  ctx.beginPath();
-  if (ctx.roundRect) ctx.roundRect(-body * 0.75, -body * 0.75, body * 1.5, body * 1.5, br);
-  else ctx.rect(-body * 0.75, -body * 0.75, body * 1.5, body * 1.5);
-  ctx.fill(); ctx.stroke();
-  ctx.fillStyle = '#0a84ff';
-  ctx.beginPath();
-  ctx.moveTo(0, -body * 0.75); ctx.lineTo(-body * 0.3, -body * 0.2); ctx.lineTo(body * 0.3, -body * 0.2);
-  ctx.closePath(); ctx.fill();
-  ctx.restore();
 
   if (s.battery < 20 && s.battery > 0 && !s.crashed) {
     ctx.fillStyle = 'rgba(255,69,58,0.9)'; ctx.font = '600 12px -apple-system, system-ui, sans-serif';
-    ctx.textAlign = 'center'; ctx.textBaseline = 'alphabetic';
+    ctx.textAlign = 'center';
     ctx.fillText('Battery low - head back to the pad', W / 2, 64);
   }
 
@@ -412,6 +500,7 @@ function step(now) {
   if (!s.crashed) {
     if (!s.started && (Math.abs(throttle) > 0.1 || Math.abs(pitch) > 0.1)) { s.started = true; say('Lifting off. Nice and easy.'); }
     if (s.battery <= 0.5) throttle = Math.min(throttle, -0.35);
+    if (s.alt > MAX_ALT) throttle = Math.min(throttle, -0.2);
     s.yaw += yawIn * YAW_RATE * dt;
     var fx = Math.sin(s.yaw), fy = -Math.cos(s.yaw), rx = Math.cos(s.yaw), ry = Math.sin(s.yaw);
     s.vx += (fx * pitch + rx * strafe) * ACC * dt;
@@ -431,14 +520,14 @@ function step(now) {
     if (s.x > B) s.vx -= (s.x - B) * 2 * dt * 10;
     if (s.y < -B) s.vy += (-B - s.y) * -2 * dt * 10;
     if (s.y > B) s.vy -= (s.y - B) * 2 * dt * 10;
-    for (var i = 0; i < s.trees.length && !s.crashed; i++) {
-      var t = s.trees[i];
+    for (var i = 0; i < world.trees.length && !s.crashed; i++) {
+      var t = world.trees[i];
       if (s.alt < t.h && Math.hypot(s.x - t.x, s.y - t.y) < t.r * 0.45 + 1.2) {
         showCrash('Clipped a tree. Press R or tap below to go again.');
       }
     }
-    for (var j = 0; j < s.buildings.length && !s.crashed; j++) {
-      var b = s.buildings[j];
+    for (var j = 0; j < world.buildings.length && !s.crashed; j++) {
+      var b = world.buildings[j];
       if (s.alt < b.h && Math.abs(s.x - b.x) < b.w / 2 + 1 && Math.abs(s.y - b.y) < b.d / 2 + 1) {
         showCrash('Bumped into a building. Press R or tap below to go again.');
       }
@@ -446,7 +535,7 @@ function step(now) {
     if (!s.crashed) {
       for (var k = 0; k < s.rings.length; k++) {
         var r = s.rings[k];
-        if (Math.hypot(s.x - r.x, s.y - r.y) < 11 && Math.abs(s.alt - r.alt) < 6) {
+        if (Math.hypot(s.x - r.x, s.y - r.y) < 8 && Math.abs(s.alt - r.alt) < 5) {
           s.rings.splice(k, 1);
           s.rings = spawnRings(s.rings, { x: s.x, y: s.y });
           s.score += 1;
@@ -459,9 +548,8 @@ function step(now) {
     s.battery -= (0.06 + work * 0.12) * dt * (s.alt > 0.01 ? 1.6 : 1);
     var onPad = s.alt <= 0.01 && Math.hypot(s.x - HOME.x, s.y - HOME.y) < 14;
     if (onPad && s.battery < 100) {
-      var wasLow = s.battery < 99;
       s.battery = Math.min(100, s.battery + 14 * dt);
-      if (s.battery >= 100 && wasLow) say('Battery topped up.');
+      if (s.battery >= 100) say('Battery topped up.');
     }
     if (s.battery <= 0) {
       s.battery = 0;
@@ -469,7 +557,7 @@ function step(now) {
     }
   }
 
-  draw(now);
+  draw(now, pitch, yawIn);
 
   hudTick++;
   if (hudTick % 6 === 0) {
